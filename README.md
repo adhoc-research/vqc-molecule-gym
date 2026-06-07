@@ -1,7 +1,5 @@
 # vqc-molecule-gym
 
-[![Deploy docs](https://github.com/adhoc-research/vqc-molecule-gym/actions/workflows/deploy-docs.yml/badge.svg)](https://github.com/adhoc-research/vqc-molecule-gym/actions/workflows/deploy-docs.yml)
-
 > **Project page**: [adhoc-research.github.io/vqc-molecule-gym](https://adhoc-research.github.io/vqc-molecule-gym/)
 
 VQC Molecule Gym is an evaluation environment for molecular VQC circuit proposals.
