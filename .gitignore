@@ -80,5 +80,10 @@ runs/*.log
 # AI assistant project instructions (not for upstream)
 AGENTS.md
 
+# PySCF checkpoint files
+*.chk
+*_metadata.json
+
 # Rendered docs directory (pages are served from root index.html)
 docs/
+resources
