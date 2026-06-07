@@ -1,0 +1,84 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+*.whl
+dist/
+build/
+
+# --- Environment ---
+.venv/
+venv/
+.env
+
+# --- IDE & OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Python profiling ---
+*.prof
+*.cprof
+*.pstats
+
+# --- Testing & coverage ---
+.coverage
+.coverage.*
+coverage/
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Compiled extensions & build artifacts ---
+*.o
+*.obj
+*.lib
+*.exp
+*.pdb
+*.so
+*.dll
+*.dylib
+
+# --- ML / science checkpoints & data ---
+*.ckpt
+*.pth
+*.pt
+*.npy
+*.npz
+*.h5
+*.hdf5
+
+# --- Logs ---
+*.log
+
+# --- Dask distributed ---
+dask-worker-space/
+
+# --- Generated / cached data ---
+.cache/
+data/
+benchmarks/
+runs/
+reports/
+
+# --- Project-specific excludes ---
+# Evaluation logs and checkpoints (large, not part of source)
+runs/*.jsonl
+runs/*.pid
+runs/*.log
+
+# AI assistant project instructions (not for upstream)
+AGENTS.md
+
+# Rendered docs directory (pages are served from root index.html)
+docs/

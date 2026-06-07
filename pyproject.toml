@@ -1,0 +1,37 @@
+[project]
+name = "vqc-molecule-gym"
+version = "0.1.0"
+description = "QChem VQC evaluation environment for structured circuit proposals."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+license = { text = "MIT" }
+authors = [{ name = "vqc-molecule-gym contributors" }]
+dependencies = [
+  "cudaq>=0.14.2",
+  "cudaq-solvers>=0.6.0",
+  "cuda-quantum-cu13>=0.14.2",
+  "cudaq-solvers-cu13>=0.6.0",
+  "numpy>=2.0",
+  "pydantic>=2.8",
+  "pyscf>=2.10",
+  "pyyaml>=6.0",
+  "scipy>=1.14",
+  "verifiers>=0.1.14",
+  "torch>=2.0",
+  "gymnasium>=0.29",
+  "pufferlib>=0.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.hatch.build.targets.wheel]
+packages = ["vqc_molecule_gym"]

@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>vqc-molecule-gym · An evaluation environment for variational quantum circuits in molecular ground-state estimation</title>
+  <meta name="description"
+        content="An evaluation environment that scores proposed variational quantum circuits for molecular ground-state energy estimation. Circuits are built and simulated on a CUDA-Q backend and compared against exact diagonalization references across seven molecular benchmark families." />
+  <meta name="author" content="vqc-molecule-gym" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="vqc-molecule-gym · Evaluation environment for variational quantum circuits" />
+  <meta property="og:description"
+        content="Proposed variational quantum circuits are simulated on a CUDA-Q backend and scored against exact molecular energies. Interactive figures report potential-energy surfaces, baseline comparisons, reward composition, and benchmark difficulty." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://adhoc-research.github.io/vqc-molecule-gym/" />
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="vqc-molecule-gym · Evaluation environment for variational quantum circuits" />
+  <meta name="twitter:description"
+        content="Variational quantum-circuit proposals scored against exact molecular energies on a CUDA-Q backend." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/style.css" />
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231b5e8c'/><text x='16' y='22' font-size='18' font-weight='bold' fill='white' text-anchor='middle'>Q</text></svg>" />
+
+  <!-- Charting: vendored ECharts (no CDN dependency at runtime) -->
+  <script src="assets/js/vendor/echarts.min.js" defer></script>
+  <!-- Inlined data bundle so the page also works when opened directly from disk -->
+  <script src="assets/data/data.js" defer></script>
+  <script src="assets/js/dashboard.js" defer></script>
+</head>
+
+<body>
+
+<!-- ============================================================ Top bar -->
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">
+      <span class="logo">Q</span>
+      <span>vqc-molecule-gym <small>v0.1.0</small></span>
+    </div>
+    <nav class="topnav" aria-label="sections">
+      <a href="#molecules">Molecules</a>
+      <a href="#concept">Task</a>
+      <a href="#pes">Energy surfaces</a>
+      <a href="#algorithms">Baselines</a>
+      <a href="#rewards">Reward</a>
+      <a href="#benchmarks">Difficulty</a>
+      <a href="#stack">Implementation</a>
+      <a href="#future">Future work</a>
+    </nav>
+    <a class="gh" href="https://github.com/adhoc-research/vqc-molecule-gym">GitHub ↗</a>
+  </div>
+</div>
+
+<!-- ============================================================ Hero -->
+<header class="hero">
+  <div class="wrap">
+    <h1>vqc-molecule-gym</h1>
+    <p class="subtitle">An evaluation environment for variational quantum circuits in molecular ground-state estimation</p>
+    <p class="hero-copy">
+      <span class="abstract-label">Abstract.</span>
+      The environment formulates molecular ground-state estimation as a sequential decision task.
+      An agent proposes a sequence of operator-pool entries with optional per-operator variational
+      angles; the environment validates the proposal, constructs a circuit from a Hartree-Fock
+      reference state, simulates the statevector on a CUDA-Q backend, and evaluates the resulting
+      molecular energy against exact diagonalization. A shaped reward accounts for energy error,
+      chemical accuracy, circuit depth, and shot cost. The figures below summarise evaluation logs
+      from three baseline search algorithms across seven molecular benchmark families.
+    </p>
+
+    <p class="keywords">
+      <b>Keywords:</b> variational quantum circuits · molecular ground-state energy ·
+      UCCSD operator pools · CUDA-Q statevector simulation · exact diagonalization ·
+      reinforcement-learning environment · chemical accuracy
+    </p>
+
+    <div class="statrow" id="statrow">
+      <div class="stat"><div class="value" id="stat-eval">506</div><div class="label">evaluations</div></div>
+      <div class="stat"><div class="value" id="stat-tasks">50</div><div class="label">molecular tasks</div></div>
+      <div class="stat"><div class="value" id="stat-bench">7</div><div class="label">benchmark families</div></div>
+      <div class="stat"><div class="value" id="stat-agents">3</div><div class="label">baseline agents</div></div>
+      <div class="stat"><div class="value" id="stat-chemacc">142</div><div class="label">chemically-accurate results</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================ Benchmark set -->
+<section class="section" id="molecules">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Benchmark set</div>
+      <h2>Molecular benchmark families</h2>
+      <p>
+        Seven molecular families span the difficulty range, from two-electron diatomics to a
+        hydrogen-bonded water dimer. Each family is evaluated over a geometry scan (bond length,
+        bond angle, or interaction distance), giving the potential energy surfaces reported below.
+      </p>
+    </div>
+
+    <div class="mol-gallery" id="molecule-gallery">
+      <!-- ball-and-stick molecule cards injected by JS -->
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ Task formulation -->
+<section class="section" id="concept">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">1 · Task formulation</div>
+      <h2>Molecular ground-state estimation as a sequential decision task</h2>
+      <p>
+        Each task specifies a molecule, geometry, basis set, active space, fermion-to-qubit mapping,
+        an operator pool, and an exact energy reference. An agent submits a structured JSON action
+        consisting of a sequence of pool operators, optional per-operator angles (in radians), and a
+        shot count. The environment validates and evaluates the action and returns the molecular
+        energy, the energy error relative to exact diagonalization, a chemical-accuracy flag, circuit
+        metrics, and a scalar reward.
+      </p>
+    </div>
+
+    <div class="pipeline" aria-label="five-stage evaluation pipeline">
+      <div class="stage"><span class="num">01 · TASK</span><h4>Load spec</h4><p>Molecule, geometry, active space, operator constraints, and exact reference.</p></div>
+      <div class="stage"><span class="num">02 · PROMPT</span><h4>Expose</h4><p>Serve the task via the CLI or as a Verifiers prompt with serialized metadata.</p></div>
+      <div class="stage"><span class="num">03 · ACTION</span><h4>Validate</h4><p>Parse strict JSON against operator IDs, depth limits, angle bounds, and shots.</p></div>
+      <div class="stage"><span class="num">04 · CIRCUIT</span><h4>Simulate</h4><p>Build a CUDA-Q kernel from Hartree-Fock and extract the statevector.</p></div>
+      <div class="stage"><span class="num">05 · REWARD</span><h4>Score</h4><p>Energy error, chemical-accuracy flag, circuit metrics, and shaped reward.</p></div>
+    </div>
+    <p class="figcaption"><b>Figure 1.</b> The five-stage evaluation pipeline applied to every submitted action.</p>
+  </div>
+</section>
+
+<!-- ============================================================ Results: PES -->
+<section class="section" id="pes">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">2 · Results</div>
+      <h2>Recovered ground-state energies versus exact references</h2>
+      <p>
+        For each geometry in a scan, the lowest-energy circuit found by any agent is shown against the
+        exact diagonalization reference. The adjacent panel reports the absolute energy error in
+        milli-Hartree on a logarithmic axis; the dashed line marks the 1.6 mHa chemical-accuracy
+        threshold (1 kcal mol⁻¹).
+      </p>
+    </div>
+
+    <div class="controls" id="pes-tabs" role="tablist" aria-label="molecule">
+      <span class="ctl-label">MOLECULE</span>
+      <!-- tabs injected by JS -->
+    </div>
+
+    <div class="panel-grid cols-2">
+      <div class="panel">
+        <div class="panel-head"><h3>Potential energy surface</h3><span class="sub" id="pes-energy-sub">Hartree</span></div>
+        <div class="panel-body"><div class="chart" id="pes-energy"></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Energy error</h3><span class="sub">milli-Hartree, log scale</span></div>
+        <div class="panel-body"><div class="chart" id="pes-error"></div></div>
+      </div>
+    </div>
+    <p class="figcaption"><b>Figure 2.</b> Potential energy surfaces (left) and per-geometry energy error (right). The exact reference is drawn as a black dashed line. Select a molecule to update both panels.</p>
+  </div>
+</section>
+
+<!-- ============================================================ Results: baselines -->
+<section class="section" id="algorithms">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">3 · Results</div>
+      <h2>Baseline search algorithms</h2>
+      <p>
+        Three baseline agents (random sampling, greedy search, and beam search) operate under the
+        same evaluator contract and action constraints. The first panel reports the median per-task
+        energy error for each agent; the second reports the fraction of geometries reaching
+        chemical accuracy.
+      </p>
+    </div>
+
+    <div class="panel-grid">
+      <div class="panel">
+        <div class="panel-head"><h3>Median energy error by agent</h3><span class="sub">mHa, log scale</span></div>
+        <div class="panel-body"><div class="chart" id="algo-error"></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Chemical-accuracy hit rate</h3><span class="sub">% of tasks below 1.6 mHa</span></div>
+        <div class="panel-body"><div class="chart" id="algo-hits"></div></div>
+      </div>
+    </div>
+    <p class="figcaption"><b>Figure 3.</b> Baseline algorithm comparison across the seven benchmark families. Lower error and higher hit rate are better.</p>
+  </div>
+</section>
+
+<!-- ============================================================ Results: reward -->
+<section class="section" id="rewards">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">4 · Results</div>
+      <h2>Reward decomposition and circuit cost</h2>
+      <p>
+        The reward combines an energy-error term with additional terms for chemical accuracy, circuit
+        depth, shot cost, and operator compactness. The first panel decomposes the reward of the
+        highest-scoring circuit for each benchmark; the second relates circuit depth to energy
+        error for individual circuits.
+      </p>
+
+      <div class="formula" aria-label="reward function definition">
+        <div class="eq">
+          R = 0.90 · s(ε) + 0.08 · 𝟙[ε ≤ ε*] + 0.01 · s<sub>depth</sub>
+          + 0.005 · s<sub>shots</sub> + 0.005 · s<sub>compact</sub>
+        </div>
+        <div class="eq sub">
+          s(ε) = 1 − <span class="frac">2(ε / ε*) ⁄ (1 + ε / ε*)</span>
+        </div>
+        <ul class="where">
+          <li><span class="w">ε</span> absolute energy error in milli-Hartree, relative to exact diagonalization</li>
+          <li><span class="w">ε*</span> chemical-accuracy threshold, 1.6 mHa (1 kcal mol⁻¹)</li>
+          <li><span class="w">s(ε)</span> bounded error score: 0 mHa maps to +1, ε* maps to 0, large errors asymptote to −1</li>
+          <li><span class="w">s<sub>depth</sub>, s<sub>shots</sub>, s<sub>compact</sub></span> resource scores in [0, 1] for circuit depth, shot count, and operator count</li>
+          <li><span class="w">𝟙[ε ≤ ε*]</span> chemical-accuracy bonus, 1 when the circuit clears the threshold</li>
+        </ul>
+        <p class="note"><code>reward_v1.1.0</code> · the error term dominates; the resource terms act as tie-breakers.</p>
+      </div>
+    </div>
+
+    <div class="panel-grid">
+      <div class="panel">
+        <div class="panel-head"><h3>Reward component breakdown</h3><span class="sub">highest-reward circuit per benchmark</span></div>
+        <div class="panel-body"><div class="chart" id="reward-components"></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Depth versus energy error</h3><span class="sub">individual circuits, log axes</span></div>
+        <div class="panel-body"><div class="chart" id="reward-pareto"></div></div>
+      </div>
+    </div>
+    <p class="figcaption"><b>Figure 4.</b> Reward composition per benchmark, and the relationship between circuit depth and energy error for individual circuits, with points colored by agent.</p>
+  </div>
+</section>
+
+<!-- ============================================================ Results: difficulty -->
+<section class="section" id="benchmarks">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">5 · Results</div>
+      <h2>Search difficulty across benchmarks</h2>
+      <p>
+        A high-effort beam search (<code>beam_width=16</code>, <code>max_operators=4</code>, with angle
+        refinement) estimates the lowest error attainable for each benchmark. The heatmap reports the
+        minimum, median, and maximum error across each scan; the cards below group benchmarks into
+        curriculum tiers by attainable accuracy.
+      </p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Attainable error per benchmark</h3><span class="sub">mHa, log color · darker = higher error</span></div>
+      <div class="panel-body"><div class="chart tall" id="overview-heatmap"></div></div>
+    </div>
+
+    <div class="tier-grid" id="curriculum" style="margin-top:18px">
+      <!-- curriculum cards injected by JS -->
+    </div>
+    <p class="figcaption"><b>Figure 5.</b> Attainable energy error per benchmark and the resulting curriculum grouping. Tiers are defined in <code>vqc_molecule_gym/curricula.py</code>; figures match <code>reports/beam_ceiling_check_summary.md</code>.</p>
+  </div>
+</section>
+
+<!-- ============================================================ Implementation -->
+<section class="section" id="stack">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Implementation</div>
+      <h2>Software and dependencies</h2>
+      <p>
+        The environment depends on CUDA-Q and CUDA-QX for circuit simulation and molecular data, with
+        PySCF providing the local molecule backend. Actions and results are validated with Pydantic
+        schemas, and the environment is exposed through a Verifiers adapter.
+      </p>
+    </div>
+
+    <div class="chips" style="margin-bottom:26px">
+      <div class="chip"><span class="ico"></span><div><strong>CUDA-Q</strong><br /><span>statevector simulation</span></div></div>
+      <div class="chip"><span class="ico"></span><div><strong>CUDA-QX</strong><br /><span>molecular data · UCCSD pools</span></div></div>
+      <div class="chip"><span class="ico"></span><div><strong>PySCF</strong><br /><span>local molecule backend</span></div></div>
+      <div class="chip"><span class="ico"></span><div><strong>Pydantic</strong><br /><span>action and result schemas</span></div></div>
+      <div class="chip"><span class="ico"></span><div><strong>Verifiers</strong><br /><span>environment adapter</span></div></div>
+      <div class="chip"><span class="ico"></span><div><strong>Python 3.11</strong><br /><span>uv-managed project</span></div></div>
+    </div>
+
+    <ul class="modules">
+      <li><code>chemistry/</code>: CUDA-QX molecular adapter, dense Hamiltonian builder, and exact diagonalization.</li>
+      <li><code>operators/</code>: deterministic UCCSD operator-pool entries keyed by operator ID.</li>
+      <li><code>circuits/</code>: Hartree-Fock preparation, CUDA-Q kernel construction, and statevector extraction.</li>
+      <li><code>evaluators/</code>: direct-energy evaluator with chemistry and operator-pool caches.</li>
+      <li><code>rewards/</code>: reward over validity, energy error, circuit depth, and shot cost.</li>
+      <li><code>baselines/</code>: random, greedy, and beam search ranked by <code>delta_error_mha</code>.</li>
+      <li><code>reporting/</code>: leaderboards, Pareto frontiers, and base-versus-best comparisons.</li>
+      <li><code>envs/</code>: Verifiers <code>vf.Env</code> adapter with real evaluator reward scoring.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ Future work -->
+<section class="section" id="future">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Future work</div>
+      <h2>Next steps</h2>
+      <p>
+        The current results rely on random, greedy, and beam-search baselines. Planned work replaces
+        these fixed search procedures with learned policies and connects the environment to
+        language-model post-training.
+      </p>
+    </div>
+
+    <ul class="modules" style="grid-template-columns:1fr; gap:14px;">
+      <li><b>Learned policies with PPO over a GNN.</b> Train an agent with proximal policy
+        optimization (PPO) using a graph neural network (GNN) over the molecular graph and the
+        candidate operator pool, so that a single policy generalizes across geometries rather than
+        searching each task independently.</li>
+      <li><b>Language-model post-training in the environment.</b> Use the environment as a
+        reinforcement-learning signal for post-training a Nemotron model, with the language model
+        proposing circuits as actions and being optimized against the environment reward.</li>
+      <li><b>Larger operator pools and active spaces.</b> Extend the operator pools and active
+        spaces for the harder benchmarks (H4 and N2), where the attainable error currently stalls
+        above chemical accuracy.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ Footer -->
+<footer>
+  <div class="wrap">
+    <p><strong>vqc-molecule-gym</strong> · MIT License · figures generated from the evaluation logs in this repository</p>
+    <p><a href="https://github.com/adhoc-research/vqc-molecule-gym">github.com/adhoc-research/vqc-molecule-gym ↗</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
