@@ -1,4 +1,5 @@
 # Deploy docs/ to GitHub Pages on push to main
+# v2 — trigger deploy
 name: Deploy docs
 
 on:
