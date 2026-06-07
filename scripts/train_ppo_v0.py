@@ -69,7 +69,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--gae-lambda", type=float, default=0.95)
     parser.add_argument("--clip-epsilon", type=float, default=0.2)
-    parser.add_argument("--entropy-coef", type=float, default=0.01)
+    parser.add_argument("--entropy-coef", type=float, default=0.05)
     parser.add_argument("--value-coef", type=float, default=0.5)
     parser.add_argument("--max-grad-norm", type=float, default=0.5)
     parser.add_argument("--update-epochs", type=int, default=10)
@@ -323,8 +323,12 @@ def ppo_update(
 
     Returns dict of mean losses.
     """
-    # Normalise advantages
-    adv = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+    # Normalise advantages with robust std clipping
+    adv_std = advantages.std()
+    if adv_std > 1e-6:
+        adv = (advantages - advantages.mean()) / (adv_std + 1e-8)
+    else:
+        adv = advantages - advantages.mean()  # no scaling if std is tiny
 
     # Build tensors
     obs_t = torch.as_tensor(np.stack(buffer.obs), dtype=torch.float32,
@@ -348,7 +352,7 @@ def ppo_update(
     losses_entropy: list[float] = []
     kl_vals: list[float] = []
 
-    for _ in range(config.update_epochs):
+    for epoch in range(config.update_epochs):
         np.random.shuffle(indices)
         for start in range(0, dataset_size, config.batch_size):
             idx = indices[start:start + config.batch_size]
@@ -373,7 +377,13 @@ def ppo_update(
             v_clipped_loss = (v_clipped - ret_t[idx]).pow(2)
             value_loss = 0.5 * torch.max(v_unclipped, v_clipped_loss).mean()
 
-            entropy_loss = -entropy.mean()
+            # Entropy bonus with minimum threshold to prevent collapse
+            entropy_mean = entropy.mean()
+            min_entropy = 0.5  # nat minimum; below this we boost entropy coef
+            entropy_bonus = entropy_mean
+            if entropy_mean < min_entropy:
+                entropy_bonus = entropy_mean + (min_entropy - entropy_mean) * 2.0
+            entropy_loss = -entropy_bonus
 
             loss = (policy_loss
                     + config.value_coef * value_loss
@@ -387,7 +397,7 @@ def ppo_update(
 
             losses_policy.append(float(policy_loss.item()))
             losses_value.append(float(value_loss.item()))
-            losses_entropy.append(float(entropy.mean().item()))
+            losses_entropy.append(float(entropy_mean.item()))
             with torch.no_grad():
                 kl_vals.append(float(
                     ((ratio - 1.0) - ratio.log()).mean().item()))
@@ -514,14 +524,16 @@ def train(config: PPOConfig) -> dict[str, Any]:
                 r_mean = float(np.mean(episode_rewards[-50:])) if episode_rewards else 0.0
                 l_mean = float(np.mean(episode_lengths[-50:])) if episode_lengths else 0.0
                 mc = float(np.mean(mask_compliance[-200:])) if mask_compliance else 0.0
+                ent = losses.get("entropy", 0.0)
                 print(
                     f"[{global_step:>8,} steps | "
                     f"{episode_idx:>5} eps | "
                     f"{sps:>7.1f} sps | "
-                    f"kl={losses['approx_kl']:.4f}]  "
+                    f"kl={losses['approx_kl']:.4f} | "
+                    f"ent={ent:.3f}]  "
                     f"reward={r_mean:+.4f}  "
                     f"len={l_mean:.1f}  "
-                    f"compliance={mc:.2f}"
+                    f"comp={mc:.2f}"
                 )
 
             # ── Periodic evaluation ──────────────────────────────────────
