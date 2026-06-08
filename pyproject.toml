@@ -1,7 +1,7 @@
 [project]
 name = "vqc-molecule-gym"
 version = "0.1.0"
-description = "QChem VQC evaluation environment for structured circuit proposals."
+description = "QChem VQC RL environment for structured circuit proposals."
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 license = { text = "MIT" }

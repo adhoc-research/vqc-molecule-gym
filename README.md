@@ -2,7 +2,7 @@
 
 > **Project page**: [adhoc-research.github.io/vqc-molecule-gym](https://adhoc-research.github.io/vqc-molecule-gym/)
 
-VQC Molecule Gym is an evaluation environment for molecular VQC circuit proposals.
+VQC Molecule Gym is an RL environment for molecular VQC circuit proposals.
 An agent submits structured JSON actions, the environment validates them, evaluates
 them with real chemistry/quantum simulation dependencies, computes reward and
 metrics, and logs eval-ready trajectories.

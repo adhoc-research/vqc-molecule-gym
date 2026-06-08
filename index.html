@@ -4,20 +4,20 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <title>vqc-molecule-gym · An evaluation environment for variational quantum circuits in molecular ground-state estimation</title>
+  <title>vqc-molecule-gym · An RL environment for variational quantum circuits in molecular ground-state estimation</title>
   <meta name="description"
-        content="An evaluation environment that scores proposed variational quantum circuits for molecular ground-state energy estimation. Circuits are built and simulated on a CUDA-Q backend and compared against exact diagonalization references across seven molecular benchmark families." />
+        content="An RL environment that scores proposed variational quantum circuits for molecular ground-state energy estimation. Circuits are built and simulated on a CUDA-Q backend and compared against exact diagonalization references across seven molecular benchmark families." />
   <meta name="author" content="vqc-molecule-gym" />
 
   <!-- Open Graph -->
-  <meta property="og:title" content="vqc-molecule-gym · Evaluation environment for variational quantum circuits" />
+  <meta property="og:title" content="vqc-molecule-gym · RL environment for variational quantum circuits" />
   <meta property="og:description"
         content="Proposed variational quantum circuits are simulated on a CUDA-Q backend and scored against exact molecular energies. Interactive figures report potential-energy surfaces, baseline comparisons, reward composition, and benchmark difficulty." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://adhoc-research.github.io/vqc-molecule-gym/" />
 
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="vqc-molecule-gym · Evaluation environment for variational quantum circuits" />
+  <meta name="twitter:title" content="vqc-molecule-gym · RL environment for variational quantum circuits" />
   <meta name="twitter:description"
         content="Variational quantum-circuit proposals scored against exact molecular energies on a CUDA-Q backend." />
 
@@ -47,12 +47,13 @@
     <nav class="topnav" aria-label="sections">
       <a href="#molecules">Molecules</a>
       <a href="#concept">Task</a>
-      <a href="#pes">Energy surfaces</a>
+      <a href="#pes">Surfaces</a>
       <a href="#algorithms">Baselines</a>
       <a href="#rewards">Reward</a>
       <a href="#benchmarks">Difficulty</a>
-      <a href="#stack">Implementation</a>
-      <a href="#future">Future work</a>
+      <a href="#conclusion">Conclusion</a>
+      <a href="#stack">Stack</a>
+      <a href="#future">Future</a>
     </nav>
     <a class="gh" href="https://github.com/adhoc-research/vqc-molecule-gym">GitHub ↗</a>
   </div>
@@ -62,22 +63,15 @@
 <header class="hero">
   <div class="wrap">
     <h1>vqc-molecule-gym</h1>
-    <p class="subtitle">An evaluation environment for variational quantum circuits in molecular ground-state estimation</p>
+    <p class="subtitle">An RL environment for variational quantum circuits in molecular ground-state estimation</p>
     <p class="hero-copy">
-      <span class="abstract-label">Abstract.</span>
-      The environment formulates molecular ground-state estimation as a sequential decision task.
+      The environment frames molecular ground-state estimation as a sequential decision task.
       An agent proposes a sequence of operator-pool entries with optional per-operator variational
       angles; the environment validates the proposal, constructs a circuit from a Hartree-Fock
-      reference state, simulates the statevector on a CUDA-Q backend, and evaluates the resulting
+      reference state, simulates the statevector on a CUDA-Q backend, and scores the resulting
       molecular energy against exact diagonalization. A shaped reward accounts for energy error,
       chemical accuracy, circuit depth, and shot cost. The figures below summarise evaluation logs
       from three baseline search algorithms across seven molecular benchmark families.
-    </p>
-
-    <p class="keywords">
-      <b>Keywords:</b> variational quantum circuits · molecular ground-state energy ·
-      UCCSD operator pools · CUDA-Q statevector simulation · exact diagonalization ·
-      reinforcement-learning environment · chemical accuracy
     </p>
 
     <div class="statrow" id="statrow">
@@ -266,6 +260,43 @@
       <!-- curriculum cards injected by JS -->
     </div>
     <p class="figcaption"><b>Figure 5.</b> Attainable energy error per benchmark and the resulting curriculum grouping. Tiers are defined in <code>vqc_molecule_gym/curricula.py</code>; figures match <code>reports/beam_ceiling_check_summary.md</code>.</p>
+  </div>
+</section>
+
+<!-- ============================================================ Conclusion -->
+<section class="section" id="conclusion">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Conclusion</div>
+      <h2>Summary of results</h2>
+      <p>
+        Across 506 evaluations over 50 molecular tasks in seven benchmark families, the three baseline
+        agents establish a clear ordering and a calibrated difficulty range for the environment. Beam
+        search dominates the fixed-search baselines, and the attainable error separates the benchmarks
+        into three curriculum tiers.
+      </p>
+    </div>
+
+    <ul class="modules" style="grid-template-columns:1fr; gap:14px;">
+      <li><b>Beam search is the strongest baseline.</b> Under the shared evaluator contract, beam
+        search reaches the lowest median energy error on every family and posts the highest
+        chemical-accuracy hit rate; greedy search is competitive on the easy tier, while random
+        sampling rarely clears the 1.6 mHa threshold.</li>
+      <li><b>The easy tier is effectively solved.</b> H₂, LiH, and C₂H₆ reach chemical accuracy on
+        every geometry (5/5, 8/8, and 7/7 tasks), with attainable median errors of 0.002, 1.23, and
+        0.23 mHa — a dense, reliable reward signal for early policy learning.</li>
+      <li><b>The medium tier improves but stalls near the threshold.</b> H₂O and the water dimer
+        (H₂O)₂ track toward chemical accuracy without reaching it (median errors of about 6.4 and
+        2.5 mHa), limited by the current operator pools and angle grids.</li>
+      <li><b>The hard tier remains open.</b> H₄ and N₂ show large gains over the Hartree-Fock base
+        yet stall above 10 mHa (median 22 and 84 mHa), marking them as evaluation-only tasks until
+        the operator pools and active spaces are extended.</li>
+    </ul>
+    <p class="figcaption">
+      Overall, 142 of 506 evaluated circuits reach chemical accuracy, concentrated in the easy tier.
+      These baselines set the reference frontier against which the learned policies in
+      <a href="#future">future work</a> will be measured.
+    </p>
   </div>
 </section>
 
