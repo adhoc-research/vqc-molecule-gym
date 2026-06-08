@@ -84,6 +84,9 @@ AGENTS.md
 *.chk
 *_metadata.json
 
+# CUDA-QX cudaq-pyscf backend scratch dir (isolated byproduct files)
+.cudaqx_scratch/
+
 # Rendered docs directory (pages are served from root index.html)
 docs/
 resources

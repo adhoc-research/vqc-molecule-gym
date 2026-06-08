@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import contextlib
+from pathlib import Path
+
 import cudaq_solvers
 import numpy as np
 
@@ -38,6 +41,16 @@ class CudaQXMoleculeError(RuntimeError):
     """Raised when CUDA-QX molecule generation fails with project context."""
 
 
+# CUDA-QX's cudaq-pyscf backend is a long-lived HTTP server (uvicorn) that the
+# native binding spawns lazily on the first create_molecule call. The server
+# writes PySCF byproducts (``*-pyscf.log``/``.chk``, ``*_metadata.json``) into its
+# own cwd. We chdir into this fixed, gitignored scratch dir before the first call
+# so the server is born there and every byproduct stays out of the repo root /
+# caller cwd. It must persist (not an auto-deleted temp dir): the server outlives
+# any single call and errors if its cwd is removed underneath it.
+_SCRATCH_DIR = Path(__file__).resolve().parents[2] / ".cudaqx_scratch"
+
+
 def build_molecular_data(
     atoms: list[tuple[str, float, float, float]],
     *,
@@ -71,18 +84,20 @@ def build_molecular_data(
     cudaqx_spin = multiplicity - 1
     _validate_spin_electron_parity(active_electrons, cudaqx_spin, multiplicity)
 
-    try:
-        molecule = cudaq_solvers.create_molecule(
-            geometry,
-            basis.lower(),
-            cudaqx_spin,
-            charge,
-            nele_cas=active_electrons,
-            norb_cas=active_orbitals,
-            casci=True,
-        )
-    except Exception as exc:  # noqa: BLE001 - CUDA-QX wraps useful errors as HTTP 500.
-        raise CudaQXMoleculeError(_format_cudaqx_error(exc, geometry, basis, charge, multiplicity, cudaqx_spin, active_electrons, active_orbitals)) from exc
+    _SCRATCH_DIR.mkdir(exist_ok=True)
+    with contextlib.chdir(_SCRATCH_DIR):
+        try:
+            molecule = cudaq_solvers.create_molecule(
+                geometry,
+                basis.lower(),
+                cudaqx_spin,
+                charge,
+                nele_cas=active_electrons,
+                norb_cas=active_orbitals,
+                casci=True,
+            )
+        except Exception as exc:  # noqa: BLE001 - CUDA-QX wraps useful errors as HTTP 500.
+            raise CudaQXMoleculeError(_format_cudaqx_error(exc, geometry, basis, charge, multiplicity, cudaqx_spin, active_electrons, active_orbitals)) from exc
 
     h1 = np.ascontiguousarray(np.asarray(molecule.hpq, dtype=np.complex128))
     h2 = np.ascontiguousarray(2.0 * np.asarray(molecule.hpqrs, dtype=np.complex128))
