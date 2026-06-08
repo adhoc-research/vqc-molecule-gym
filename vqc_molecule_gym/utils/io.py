@@ -31,7 +31,7 @@ def read_jsonl_models(path: Path, model_type: type[T]) -> list[T]:
 
 def write_jsonl(path: Path, rows: Iterable[object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
+    with path.open("a", encoding="utf-8") as f:
         for row in rows:
             if isinstance(row, BaseModel):
                 f.write(row.model_dump_json() + "\n")

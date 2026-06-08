@@ -48,11 +48,19 @@ class PPOEvaluator:
         policy: QChemPPOPolicy,
         config: PPOConfig,
         device: torch.device,
+        max_action_dim: int | None = None,
     ) -> None:
         self.policy = policy
         self.config = config
         self.device = device
+        self.max_action_dim = max_action_dim or self._get_action_dim()
         self.policy.eval()
+
+    def _get_action_dim(self) -> int:
+        """Determine the fixed action dimension from the policy head."""
+        if hasattr(self.policy, "policy_head"):
+            return self.policy.policy_head.out_features
+        return self.config.max_operators * 10  # fallback
 
     def act(
         self,
@@ -64,7 +72,8 @@ class PPOEvaluator:
         param_bins = self.config.parameter_bins
         max_ops = self.config.max_operators
         op_ids = tuple(sorted(operator_ids))
-        num_actions = 1 + len(op_ids) * len(param_bins)
+        num_valid_actions = 1 + len(op_ids) * len(param_bins)
+        max_action_dim = self.max_action_dim
 
         # Base evaluation
         shots = self.config.shots
@@ -94,8 +103,11 @@ class PPOEvaluator:
                 previous_reward=current_reward,
             )
 
-            # Build action mask
-            mask = np.ones(num_actions, dtype=np.float32)
+            # Build action mask (fixed max_action_dim size)
+            mask = np.ones(max_action_dim, dtype=np.float32)
+            # Block actions beyond this task's valid range
+            if num_valid_actions < max_action_dim:
+                mask[num_valid_actions:] = 0.0
             if self.config.disable_stop_at_step_0 and step == 0:
                 mask[0] = 0.0
             if step >= max_ops:
@@ -284,17 +296,19 @@ def main() -> None:
     # Build policy
     evaluator = DirectEnergyEvaluator()
 
-    # We need to know action dim — load a sample task to get operator pool
-    sample_bid = canonical_benchmark_id(args.benchmarks[0])
-    sample_tasks = load_tasks(sample_bid)
-    sample_task = sample_tasks[0]
-    sample_pool = build_operator_pool(
-        sample_task.operator_pool_id,
-        num_qubits=sample_task.active_space.qubits,
-        num_electrons=sample_task.active_space.electrons,
-    )
-    sample_num_ops = len(sample_pool.ids)
-    action_dim = 1 + sample_num_ops * len(config.parameter_bins)
+    # Action dim: use from checkpoint if saved, else read from policy head
+    action_dim = ckpt.get("action_dim", None)
+    if action_dim is None:
+        if "model_state_dict" in ckpt:
+            action_dim = ckpt["model_state_dict"]["policy_head.weight"].shape[0]
+            print(f"  Inferred action dim from policy head: {action_dim}")
+        else:
+            from vqc_molecule_gym.rl.qchem_env import QChemPPOEnv
+            tmp = QChemPPOEnv(config)
+            tmp.reset()
+            action_dim = int(tmp.action_space.n)
+            print(f"  Computed action dim from env: {action_dim}")
+            tmp.close()
 
     policy = QChemPPOPolicy(
         obs_dim=obs_dim(config.max_operators),
@@ -306,7 +320,7 @@ def main() -> None:
     policy.eval()
     print(f"Loaded checkpoint from step {ckpt.get('step', '?')}")
 
-    ppo_agent = PPOEvaluator(policy, config, device)
+    ppo_agent = PPOEvaluator(policy, config, device, max_action_dim=action_dim)
 
     # Build baseline agents
     baseline_agents = build_baseline_agents(evaluator, config, seed=args.seed)

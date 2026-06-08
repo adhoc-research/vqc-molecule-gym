@@ -554,6 +554,8 @@ def train(config: PPOConfig) -> dict[str, Any]:
                     "model_state_dict": policy.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                     "config": dataclasses.asdict(config),
+                    "action_dim": action_dim,
+                    "obs_dim": obs_dim_val,
                     "eval_metrics": eval_metrics,
                 }, ckpt_path)
                 print(f"  Checkpoint: {ckpt_path}\n")
