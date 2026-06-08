@@ -59,3 +59,94 @@ Compact MVP `*_v0` scans:
 - `h2o_dimer_distance_scan_v0` — water-dimer O...O distance scan over `[2.40, 2.60, 2.80, 3.00, 3.20, 3.50, 4.00]` Å.
 
 The `*_v0` scans are compact MVP grids for environment validation, dashboards, and baseline sweeps. They are intentionally not paper-final grids. Larger molecules use reduced active spaces so exact diagonalization can remain the primary core-reference path where feasible; approximate/precomputed reference tiers should not be mixed into the official core leaderboard.
+
+## Post-training a Nemotron model
+
+The environment is exposed to the [Verifiers](https://github.com/PrimeIntellect-ai/verifiers)
+RL stack through `vqc_molecule_gym.envs.verifiers_adapter:load_environment`, which builds a
+`vf.Env` whose single reward is the shaped environment reward (`reward_v1`: validity, energy
+error, circuit depth, shot cost). Post-training a Nemotron policy means having the model emit
+one JSON action per task (see [Action format](#action-format)) and optimizing it against that
+reward with GRPO. The action JSON is parsed and scored by the same real-backend evaluator used
+by the baselines, so the policy is trained on true chemical-accuracy signal, not a proxy.
+
+### 1. Install the RL stack
+
+The base `verifiers` wheel (pinned `>=0.1.14`) ships the environment adapter and `vf-eval`, but
+the trainer and inference server live in the optional `verifiers-rl` package (`vf-rl`,
+`vf-train`, and `vf-vllm` raise an explicit "install verifiers-rl" error until it is present):
+
+```bash
+uv add verifiers-rl vllm
+```
+
+`prime-rl` (Prime Intellect's GRPO trainer) is an equivalent training backend and ships the same
+`prime-rl` entry point.
+
+### 2. Build the benchmark and references
+
+Rollouts need generated tasks and precomputed exact references for whichever benchmark you train
+on. For the smallest curriculum:
+
+```bash
+uv run python scripts/generate_tasks.py --benchmark h2_tiny
+uv run python scripts/precompute_references.py --benchmark h2_tiny
+```
+
+Any benchmark from [Supported generated benchmarks](#supported-generated-benchmarks) works the
+same way (`lih_bond_scan_v0`, `h4_small`, ...).
+
+### 3. Serve the Nemotron policy
+
+Start an OpenAI-compatible endpoint for the checkpoint you are post-training (any `nvidia/Nemotron-*`
+model on Hugging Face). Either of the following works; see `--help` for GPU/parallelism flags:
+
+```bash
+MODEL=nvidia/Nemotron-<variant>
+uv run vf-vllm --model "$MODEL" --port 8000     # verifiers-rl inference server
+# or, plain vLLM:
+# uv run vllm serve "$MODEL" --port 8000
+```
+
+### 4. Smoke-test rollouts and reward
+
+Before spending GPU hours on GRPO, confirm the policy returns parseable actions and the
+evaluator scores them end to end. The env-id is the importable module that exposes
+`load_environment`:
+
+```bash
+export OPENAI_API_KEY=local   # vLLM ignores the value but a key var must be set
+uv run vf-eval vqc_molecule_gym.envs.verifiers_adapter \
+  -a '{"benchmark_id": "h2_tiny", "max_turns": 1}' \
+  -m "$MODEL" -b http://localhost:8000/v1 -k OPENAI_API_KEY \
+  -n 5 -r 4 -s
+```
+
+`-a` passes environment args (forwarded as keyword arguments to `load_environment`; the adapter
+accepts `benchmark_id`, `max_turns`, `reward_version`, and `benchmark_root`), `-m`/`-b`/`-k` point
+at the served model, and `-n`/`-r` set examples and rollouts per example. Finite per-rollout
+rewards that vary across actions, with no `qchem_parse_error`/`qchem_eval_error` in the saved
+state, mean the loop is wired correctly (the reward is `-1.0` only for unparseable or invalid
+actions; valid actions score on a smooth scale that is `+1` at zero energy error and asymptotes
+to `-1` for large errors).
+
+### 5. Run GRPO post-training
+
+Launch the trainer against the same env-id and the Nemotron checkpoint:
+
+```bash
+uv run vf-rl <config.toml>     # or: uv run prime-rl <config.toml>
+```
+
+In the trainer config set the environment id to `vqc_molecule_gym.envs.verifiers_adapter` with
+`env_args = { benchmark_id = "h2_tiny" }`, the policy/model to your Nemotron checkpoint, and keep
+the reward as the environment default. The full GRPO config schema (batch size, learning rate,
+vLLM colocation, etc.) is owned by `verifiers-rl`/`prime-rl`; see `vf-rl --help` and the upstream
+docs for the exact keys.
+
+### NVIDIA NeMo RL backend
+
+To post-train with NVIDIA's native stack (NeMo RL / NeMo-Gym) instead of `verifiers-rl`, point the
+rollouts at a NeMo-Gym server and select the matching client with
+`--api-client-type nemorl_chat_completions` (e.g. on `vf-eval`). The environment, action schema,
+and reward are unchanged — only the inference/training backend differs.
